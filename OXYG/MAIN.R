@@ -8,25 +8,28 @@
 set.seed(1221)
 
 # source all dependent files
-source("/dbfs/lf_model_test/OXYG/parameters.R")
-source("/dbfs/lf_model_test/OXYG/forecasting_functions.R")
+source(here::here("OXYG","parameters.R"))
+source(here::here("OXYG","forecasting_functions.R"))
 
 options(warn = -1,digits = 3,error = NULL,verbose = F)
 
 # read data from S3 --- directly read the data needed for modeling
 # set-up spark connection
-SparkR::sparkR.session()
-sc <- sparklyr::spark_connect(method = "databricks")
+#SparkR::sparkR.session()
+#sc <- sparklyr::spark_connect(method = "databricks")
+#df_source <- sparklyr::spark_read_csv(sc, name = inputFileName, path = inputFilePath)
 
-# read the data from S3
-df_source <- sparklyr::spark_read_parquet(sc, name = inputFileName, path = inputFilePath)
+# read data from local
+df_source <- read_csv(here::here("OXYG","OXYG_TEST_DATA.csv"))
 inputFile <- collect(df_source)
+
+# formatting the data
 inputFile$Week <- as.Date(inputFile$Week,format = "%Y-%m-%d")
 inputFile$Date <- as.Date(inputFile$Date,format = "%Y-%m-%d")
 inputFile <- inputFile[order(inputFile$Week,inputFile$Date),]
 
 OOS_start <- subset(inputFile,Source == "Compass")$Week[1]
-all_models <- readxl::read_xlsx("/dbfs/lf_model_test/OXYG/OXYG_model_details.xlsx")
+all_models <- readxl::read_xlsx(here::here("OXYG","OXYG_model_details.xlsx"))
 version_models <- subset(all_models,Model_version == current_model & Data_version == current_data)
 column_ids = c("Network","Demo","Model_type","Data_version","Model_version",
                "HH_NT_Daypart","program_type","Show_Name")
@@ -88,7 +91,7 @@ s3_output <- do.call(rbind,lapply(all_outputs,function(x) return(x[,output_cols]
 
 head(s3_output)
 
-# Tong's plugin: store the data into RDS
-library(RMySQL)
-connection <- dbConnect(MySQL(), user = 'lf_master', password = 'linearforecasting', host = 'lf-r-test.cqwbwa84updc.us-east-1.rds.amazonaws.com', dbname = 'r_test')
-DBI::dbWriteTable(connection, "linear_forecasts", s3_output, append = T, overwrite = F, row.names = F)
+# Plugin: store the data into csv
+write.csv(s3_output,here::here("OXYG","OXYG_TEST_OUTPUTS.csv"))
+
+# Plugin: store the data into RDS or S3 ???
